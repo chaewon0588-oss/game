@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>뱀 게임</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* 파스텔톤 배경 */
+      background: linear-gradient(135deg, #ffe4ec 0%, #e8f0ff 50%, #e6fff4 100%);
+      color: #6b5b7b;
+      font-family: sans-serif;
+    }
+    h1 {
+      margin: 0 0 10px;
+      color: #b49ad8;
+    }
+    #score {
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    #wrap {
+      position: relative;
+    }
+    canvas {
+      display: block;
+      background: #fffaf3;
+      border: 4px solid #d8c8f0;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(180, 154, 216, 0.3);
+    }
+    /* 게임 위에 겹쳐 보이는 화면 (시작 / 게임 끝 / 클리어) */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 250, 243, 0.85);
+      border-radius: 16px;
+    }
+    #message {
+      font-size: 56px;
+      font-weight: bold;
+    }
+    #subMessage {
+      font-size: 20px;
+      margin: 10px 0 28px;
+    }
+    #startBtn {
+      font-size: 22px;
+      font-weight: bold;
+      padding: 12px 36px;
+      border: none;
+      border-radius: 999px;
+      background: #b5e8d5;
+      color: #4f7a6a;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #8fcfb8;
+    }
+    #startBtn:hover {
+      background: #c8f0e1;
+    }
+    #startBtn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #8fcfb8;
+    }
+    p {
+      color: #9a8aab;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐍 뱀 게임</h1>
+  <div id="score">점수: 0 / 50</div>
+  <div id="wrap">
+    <canvas id="game" width="480" height="480"></canvas>
+    <div id="overlay">
+      <div id="message" style="color:#b49ad8">뱀 게임</div>
+      <div id="subMessage">먹이를 먹고 50점을 채워 보세요!</div>
+      <button id="startBtn">게임 시작</button>
+    </div>
+  </div>
+  <p>← ↑ → ↓ 방향키로 움직여요</p>
+
+  <script>
+    // ===== 기본 준비 =====
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");   // 그림을 그리는 붓
+    const overlay = document.getElementById("overlay");
+    const message = document.getElementById("message");
+    const subMessage = document.getElementById("subMessage");
+    const startBtn = document.getElementById("startBtn");
+    const scoreText = document.getElementById("score");
+
+    // ===== 게임 설정 =====
+    const CELL = 24;                       // 한 칸 크기
+    const COUNT = canvas.width / CELL;     // 가로/세로 칸 수 (20칸)
+    const SPEED = 120;                     // 뱀이 한 칸 가는 시간 (작을수록 빠름)
+    const GOAL = 50;                       // 클리어 점수
+
+    // ===== 파스텔 색 =====
+    const COLOR_HEAD = "#2fa37f";
+    const COLOR_BODY = "#5cc49c";
+    const COLOR_FOOD = "#ff5c8a";
+    const COLOR_GRID = "#f5ede2";
+
+    // ===== 게임 상태 =====
+    let snake = [];        // 뱀 몸 (0번이 머리)
+    let dir = { x: 1, y: 0 };   // 지금 가는 방향
+    let nextDirs = [];     // 눌러 둔 방향키 (빨리 여러 번 눌러도 순서대로 처리)
+    let food = { x: 0, y: 0 };
+    let score = 0;
+    let timer = null;
+
+    // 게임을 처음 상태로
+    function resetGame() {
+      const mid = Math.floor(COUNT / 2);
+      snake = [
+        { x: mid, y: mid },
+        { x: mid - 1, y: mid },
+        { x: mid - 2, y: mid }
+      ];
+      dir = { x: 1, y: 0 };
+      nextDirs = [];
+      score = 0;
+      updateScore();
+      placeFood();
+    }
+
+    // 뱀이 없는 빈칸에 먹이 놓기
+    function placeFood() {
+      const empty = [];
+      for (let x = 0; x < COUNT; x++) {
+        for (let y = 0; y < COUNT; y++) {
+          if (!snake.some((s) => s.x === x && s.y === y)) empty.push({ x, y });
+        }
+      }
+      food = empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    function updateScore() {
+      scoreText.textContent = "점수: " + score + " / " + GOAL;
+    }
+
+    // ===== 조작: 방향키 =====
+    const KEYS = {
+      ArrowUp: { x: 0, y: -1 },
+      ArrowDown: { x: 0, y: 1 },
+      ArrowLeft: { x: -1, y: 0 },
+      ArrowRight: { x: 1, y: 0 }
+    };
+
+    document.addEventListener("keydown", (e) => {
+      const d = KEYS[e.key];
+      if (!d) return;
+      e.preventDefault();   // 방향키로 화면이 스크롤되지 않게
+      if (!timer) return;   // 게임 중일 때만
+
+      // 마지막으로 정한 방향과 반대 방향(뒤로 돌기)은 무시
+      const last = nextDirs.length ? nextDirs[nextDirs.length - 1] : dir;
+      if (d.x === -last.x && d.y === -last.y) return;
+      if (d.x === last.x && d.y === last.y) return;
+      if (nextDirs.length < 3) nextDirs.push(d);
+    });
+
+    // ===== 버튼 (게임 시작 / 다시 하기) =====
+    startBtn.addEventListener("click", () => {
+      resetGame();
+      overlay.style.display = "none";
+      startBtn.blur();
+      draw();
+      timer = setInterval(step, SPEED);   // SPEED마다 한 칸씩 움직이기
+    });
+
+    function endGame(text, color, sub) {
+      clearInterval(timer);
+      timer = null;
+      message.textContent = text;
+      message.style.color = color;
+      subMessage.textContent = sub;
+      startBtn.textContent = "다시 하기";
+      overlay.style.display = "flex";
+    }
+
+    // ===== 한 칸 움직이기 =====
+    function step() {
+      if (nextDirs.length) dir = nextDirs.shift();
+
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      const eating = head.x === food.x && head.y === food.y;
+
+      // 벽에 부딪혔는지
+      const hitWall = head.x < 0 || head.y < 0 || head.x >= COUNT || head.y >= COUNT;
+      // 몸에 부딪혔는지 (먹이를 안 먹으면 꼬리 끝은 비켜주므로 빼고 검사)
+      const body = eating ? snake : snake.slice(0, -1);
+      const hitBody = body.some((s) => s.x === head.x && s.y === head.y);
+
+      if (hitWall || hitBody) {
+        draw();
+        endGame("게임 끝", "#f4a6b8", "점수: " + score + "점");
+        return;
+      }
+
+      snake.unshift(head);           // 머리를 한 칸 앞에 추가
+      if (eating) {
+        score++;                     // 먹이 1개 = 1점, 꼬리는 그대로 → 길어짐
+        updateScore();
+        if (score >= GOAL) {
+          draw();
+          endGame("클리어! 🎉", "#8fcfb8", GOAL + "점 달성! 대단해요!");
+          return;
+        }
+        placeFood();
+      } else {
+        snake.pop();                 // 꼬리 끝을 빼서 길이 유지
+      }
+
+      draw();
+    }
+
+    // ===== 화면 그리기 =====
+    // 모서리가 둥근 네모
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 바둑판 무늬 배경
+      ctx.fillStyle = COLOR_GRID;
+      for (let x = 0; x < COUNT; x++) {
+        for (let y = 0; y < COUNT; y++) {
+          if ((x + y) % 2 === 0) ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        }
+      }
+
+      // 먹이 (동그라미)
+      ctx.fillStyle = COLOR_FOOD;
+      ctx.beginPath();
+      ctx.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2 - 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 뱀 몸 (꼬리부터 그려서 머리가 맨 위에 보이게)
+      for (let i = snake.length - 1; i >= 0; i--) {
+        const s = snake[i];
+        ctx.fillStyle = i === 0 ? COLOR_HEAD : COLOR_BODY;
+        roundRect(s.x * CELL + 2, s.y * CELL + 2, CELL - 4, CELL - 4, 7);
+        ctx.fill();
+      }
+
+      // 머리에 눈 그리기
+      const h = snake[0];
+      const cx = h.x * CELL + CELL / 2;
+      const cy = h.y * CELL + CELL / 2;
+      ctx.fillStyle = "#ffffff";
+      for (const side of [-1, 1]) {
+        // 가는 방향 앞쪽에, 양옆으로 눈 두 개
+        const ex = cx + dir.x * 4 + dir.y * side * 5;
+        const ey = cy + dir.y * 4 + dir.x * side * 5;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 처음 화면
+    resetGame();
+    draw();
+  </script>
+</body>
+</html>
