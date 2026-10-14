@@ -11,25 +11,26 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      /* 어두운 우주 느낌 배경 */
-      background: radial-gradient(ellipse at center, #1b1040 0%, #07051a 60%, #000 100%);
-      color: white;
+      /* 밝은 하늘 배경 */
+      background: linear-gradient(to bottom, #6ec6ff 0%, #bfe6ff 60%, #eaf7ff 100%);
+      color: #0b3d91;
       font-family: sans-serif;
     }
     h1 {
-      color: #00f0ff;
+      color: white;
       letter-spacing: 4px;
-      text-shadow: 0 0 8px #00f0ff, 0 0 24px #00f0ff;
+      text-shadow: 0 2px 0 #1e6fd9, 0 0 16px rgba(30, 111, 217, 0.6);
     }
     #wrap {
       position: relative;
     }
     canvas {
-      background: #05031a;
-      border: 2px solid #ff2bd6;
+      /* 위는 진한 하늘색, 아래로 갈수록 밝아지는 하늘 */
+      background: linear-gradient(to bottom, #3fa9f5 0%, #8fd3ff 60%, #d9f1ff 100%);
+      border: 3px solid white;
       border-radius: 8px;
       display: block;
-      box-shadow: 0 0 12px #ff2bd6, 0 0 40px rgba(255, 43, 214, 0.4);
+      box-shadow: 0 6px 24px rgba(11, 61, 145, 0.35);
     }
     /* 게임 위에 겹쳐 보이는 화면 (시작 / 게임 오버 / 클리어) */
     #overlay {
@@ -39,7 +40,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: rgba(5, 3, 26, 0.55);
+      background: rgba(11, 61, 145, 0.2);
       border-radius: 8px;
     }
     #message {
@@ -49,26 +50,25 @@
     #subMessage {
       font-size: 22px;
       margin: 12px 0 30px;
-      color: #ddd;
+      color: white;
     }
     #startBtn {
       font-size: 24px;
       font-weight: bold;
       padding: 12px 36px;
-      border: 2px solid #00f0ff;
+      border: 2px solid white;
       border-radius: 10px;
-      background: transparent;
-      color: #00f0ff;
+      background: white;
+      color: #1e6fd9;
       cursor: pointer;
-      text-shadow: 0 0 6px #00f0ff;
-      box-shadow: 0 0 10px #00f0ff, inset 0 0 10px rgba(0, 240, 255, 0.4);
+      box-shadow: 0 4px 12px rgba(11, 61, 145, 0.4);
     }
     #startBtn:hover {
-      background: #00f0ff;
-      color: #05031a;
+      background: #1e6fd9;
+      color: white;
     }
     p {
-      color: #9a9ac0;
+      color: #2a5a9e;
     }
     /* 화면 오른쪽 위 구석의 소리 버튼 (게임판을 가리지 않게) */
     #soundBtn {
@@ -78,14 +78,14 @@
       width: 48px;
       height: 48px;
       font-size: 22px;
-      border: 2px solid #ff2bd6;
+      border: 2px solid white;
       border-radius: 50%;
-      background: rgba(5, 3, 26, 0.7);
+      background: rgba(255, 255, 255, 0.7);
       cursor: pointer;
-      box-shadow: 0 0 8px #ff2bd6;
+      box-shadow: 0 2px 8px rgba(11, 61, 145, 0.3);
     }
     #soundBtn:hover {
-      background: rgba(255, 43, 214, 0.3);
+      background: white;
     }
   </style>
 </head>
@@ -111,11 +111,12 @@
     const subMessage = document.getElementById("subMessage");
     const startBtn = document.getElementById("startBtn");
 
-    // ===== 네온 색 =====
-    const NEON_CYAN = "#00f0ff";
-    const NEON_PINK = "#ff2bd6";
-    const NEON_GREEN = "#39ff14";
-    const NEON_YELLOW = "#fff200";
+    // ===== 네온 색 (밝은 하늘에서도 잘 보이게 조금 진하게) =====
+    const NEON_CYAN = "#1e6fd9";
+    const NEON_PINK = "#ff2e88";
+    const NEON_GREEN = "#22a447";
+    const NEON_YELLOW = "#ffb000";
+    const SKY_TEXT = "#0b3d91";   // 하늘 위 글씨 색 (진한 파랑)
 
     // ===== 벽돌 설정 =====
     const ROWS = 5;   // 5줄
@@ -124,7 +125,7 @@
     const BRICK_TOP = 55;
     const BRICK_H = 20;
     const BRICK_W = (canvas.width - BRICK_GAP * (COLS + 1)) / COLS;
-    const ROW_COLORS = [NEON_PINK, "#ff8a00", NEON_YELLOW, NEON_GREEN, NEON_CYAN]; // 줄마다 다른 네온 색
+    const ROW_COLORS = [NEON_PINK, "#ff7a00", NEON_YELLOW, NEON_GREEN, "#7b4dff"]; // 줄마다 다른 네온 색
 
     // ===== 패들(아래 막대) 설정 =====
     const PADDLE_NORMAL = 100;   // 보통 길이
@@ -144,8 +145,8 @@
     const ITEM_FALL = 150;       // 떨어지는 속도
     let items = [];
 
-    // ===== 꾸미기: 별, 조각 =====
-    let stars = [];
+    // ===== 꾸미기: 구름, 조각 =====
+    let clouds = [];
     let pieces = [];             // 벽돌이 깨질 때 흩어지는 조각들
 
     // ===== 게임 상태 =====
@@ -210,30 +211,39 @@
     };
 
     // ===================================================
-    //  우주 배경 별
+    //  하늘 배경 구름
     // ===================================================
-    function makeStars() {
-      stars = [];
-      for (let i = 0; i < 120; i++) {
-        stars.push({
+    function makeClouds() {
+      clouds = [];
+      for (let i = 0; i < 6; i++) {
+        clouds.push({
           x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          size: Math.random() * 1.5 + 0.3,
-          speed: Math.random() * 20 + 5,      // 천천히 아래로 흐름
-          twinkle: Math.random() * Math.PI * 2
+          y: Math.random() * (canvas.height - 120) + 40,
+          size: Math.random() * 20 + 20,       // 구름 크기
+          speed: Math.random() * 15 + 8        // 천천히 오른쪽으로 흐름
         });
       }
     }
 
-    function moveStars(dt) {
-      for (const s of stars) {
-        s.y += s.speed * dt;
-        s.twinkle += dt * 3;
-        if (s.y > canvas.height) {           // 아래로 나가면 위에서 다시 등장
-          s.y = 0;
-          s.x = Math.random() * canvas.width;
+    function moveClouds(dt) {
+      for (const c of clouds) {
+        c.x += c.speed * dt;
+        if (c.x - c.size * 3 > canvas.width) { // 오른쪽으로 나가면 왼쪽에서 다시 등장
+          c.x = -c.size * 3;
+          c.y = Math.random() * (canvas.height - 120) + 40;
         }
       }
+    }
+
+    // 동그라미 몇 개를 겹쳐서 몽실몽실한 구름 그리기
+    function drawCloud(c) {
+      const s = c.size;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, s, 0, Math.PI * 2);
+      ctx.arc(c.x + s * 1.1, c.y - s * 0.4, s * 1.2, 0, Math.PI * 2);
+      ctx.arc(c.x + s * 2.2, c.y, s * 0.9, 0, Math.PI * 2);
+      ctx.rect(c.x, c.y, s * 2.2, s * 0.9);
+      ctx.fill();
     }
 
     // ===================================================
@@ -548,19 +558,17 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 별 (반짝반짝)
-      for (const s of stars) {
-        ctx.globalAlpha = 0.4 + Math.sin(s.twinkle) * 0.3 + 0.3;
-        ctx.fillStyle = "white";
-        ctx.fillRect(s.x, s.y, s.size, s.size);
-      }
+      // 구름 (살짝 투명하게)
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = "white";
+      for (const c of clouds) drawCloud(c);
       ctx.globalAlpha = 1;
 
       // 위쪽 정보: 점수 / 레벨 / 목숨
       ctx.font = "bold 20px sans-serif";
       ctx.textBaseline = "middle";
-      glow(NEON_CYAN, 10);
-      ctx.fillStyle = NEON_CYAN;
+      glow("white", 6);
+      ctx.fillStyle = SKY_TEXT;
       ctx.textAlign = "left";
       ctx.fillText("SCORE " + score, 12, 24);
       ctx.textAlign = "center";
@@ -569,7 +577,7 @@
       for (let i = 0; i < 3; i++) {
         const alive = i < lives;
         glow(alive ? NEON_PINK : "transparent", 12);
-        ctx.fillStyle = alive ? NEON_PINK : "#33304a";  // 남은 목숨은 분홍, 잃은 목숨은 어둡게
+        ctx.fillStyle = alive ? NEON_PINK : "rgba(11, 61, 145, 0.25)";  // 남은 목숨은 분홍, 잃은 목숨은 흐리게
         ctx.fillText("♥", canvas.width - 12 - (2 - i) * 26, 24);
       }
 
@@ -578,11 +586,11 @@
         if (!b.alive) continue;
         glow(b.color, 14);
         roundRect(b.x, b.y, BRICK_W, BRICK_H, 4);
-        ctx.globalAlpha = 0.35;
+        ctx.globalAlpha = 0.8;
         ctx.fillStyle = b.color;
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = b.color;
+        ctx.strokeStyle = "white";
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -633,12 +641,16 @@
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
         ctx.fill();
+        noGlow();
+        ctx.strokeStyle = NEON_PINK;   // 밝은 하늘에서도 공이 잘 보이게 테두리
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
 
       // 출발 전 안내 글씨
       if (playing && waitTimer > 0) {
-        glow(NEON_YELLOW, 14);
-        ctx.fillStyle = NEON_YELLOW;
+        glow("white", 10);
+        ctx.fillStyle = NEON_PINK;
         ctx.font = "bold 30px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("READY!", canvas.width / 2, canvas.height / 2 + 60);
@@ -648,11 +660,11 @@
     }
 
     // ===== 계속 반복 (1초에 약 60번) =====
-    // 별과 조각은 게임이 멈춰 있어도 계속 움직여요
+    // 구름과 조각은 게임이 멈춰 있어도 계속 움직여요
     function loop(now) {
       const dt = Math.min((now - lastTime) / 1000, 0.03); // 지난 시간(초)
       lastTime = now;
-      moveStars(dt);
+      moveClouds(dt);
       movePieces(dt);
       if (playing) update(dt);
       draw();
@@ -660,7 +672,7 @@
     }
 
     // 처음 화면: 벽돌을 보여주고 시작 버튼 기다리기
-    makeStars();
+    makeClouds();
     startLevel();
     requestAnimationFrame(loop);
   </script>
